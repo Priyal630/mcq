@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCQ Localizer — Hiring Assessment Tool</title>
+<style>
+  :root {
+    --ink: #1c1d1f;
+    --paper: #faf9f6;
+    --panel: #ffffff;
+    --line: #e2e0da;
+    --line-strong: #c9c6bd;
+    --accent: #9a3324;       /* brick/terracotta — nods to the construction-trade content */
+    --accent-soft: #f3e3dd;
+    --good: #2d6a4f;
+    --good-soft: #e3f0e9;
+    --warn: #9c6b0a;
+    --warn-soft: #faf0dd;
+    --muted: #6f6b62;
+    --mono: 'IBM Plex Mono', 'Cascadia Code', monospace;
+    --serif: 'Source Serif 4', 'Georgia', serif;
+    --sans: 'IBM Plex Sans', Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 24px; background: var(--ink); color: var(--paper);
+    border-bottom: 3px solid var(--accent);
+  }
+  .topbar h1 {
+    font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 0;
+    letter-spacing: 0.2px;
+  }
+  .topbar .tagline { font-size: 12px; color: #c9c5bb; font-style: italic; }
+  .status-pill {
+    margin-left: auto; font-size: 11px; padding: 4px 10px; border-radius: 3px;
+    background: #333; color: #ddd; font-family: var(--mono);
+  }
+  .status-pill.ready { background: var(--good); color: #fff; }
+  .status-pill.error { background: var(--accent); color: #fff; }
+
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 56px); }
+
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--line); padding: 20px; background: var(--panel);
+  }
+  .sidebar h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  .upload-zone {
+    border: 1.5px dashed var(--line-strong); border-radius: 4px; padding: 20px 14px;
+    text-align: center; cursor: pointer; margin-bottom: 24px; transition: border-color 0.15s;
+  }
+  .upload-zone:hover { border-color: var(--accent); }
+  .upload-zone input { display: none; }
+  .upload-zone .icon { font-size: 22px; margin-bottom: 6px; opacity: 0.5; }
+  .upload-zone .label { font-size: 12.5px; color: var(--muted); }
+
+  .lang-select {
+    display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px;
+  }
+  .lang-option {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  .lang-option.active { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .lang-option input { accent-color: var(--accent); }
+
+  .file-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .file-meta strong { color: var(--ink); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+    border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: var(--paper);
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--sans);
+  }
+  .btn:hover { background: #000; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn.secondary:hover { border-color: var(--ink); background: #fff; }
+  .btn.accent { background: var(--accent); border-color: var(--accent); }
+  .btn.full { width: 100%; justify-content: center; margin-bottom: 8px; }
+
+  /* Main area */
+  .main { padding: 24px 28px; overflow-x: auto; }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 60vh; color: var(--muted); text-align: center;
+  }
+  .empty-state .glyph { font-size: 40px; margin-bottom: 12px; opacity: 0.3; font-family: var(--serif); }
+
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .toolbar .count { font-size: 13px; color: var(--muted); }
+  .toolbar .spacer { flex: 1; }
+
+  /* Row cards */
+  .row-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+  .row-card.approved { border-color: var(--good); }
+  .row-card-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    background: #f4f2ed; border-bottom: 1px solid var(--line); font-size: 12px;
+  }
+  .row-card-header .sr { font-family: var(--mono); color: var(--muted); }
+  .row-card-header .status-tag {
+    font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .status-tag.pending { background: #ece9e2; color: var(--muted); }
+  .status-tag.processing { background: var(--warn-soft); color: var(--warn); }
+  .status-tag.done { background: var(--good-soft); color: var(--good); }
+  .status-tag.approved-tag { background: var(--good); color: #fff; }
+  .status-tag.error-tag { background: var(--accent-soft); color: var(--accent); }
+
+  .row-card-body { padding: 16px; }
+  .stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stage {
+    border: 1px solid var(--line); border-radius: 4px; padding: 12px;
+  }
+  .stage-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 8px; font-weight: 600;
+  }
+  .stage.final { border-color: var(--accent); background: #fffaf8; }
+  .stage.final .stage-label { color: var(--accent); }
+
+  .q-text { font-size: 14.5px; margin-bottom: 10px; line-height: 1.6; }
+  .q-text[contenteditable="true"] { outline: none; border-bottom: 1px dashed transparent; }
+  .q-text[contenteditable="true"]:focus { border-bottom-color: var(--accent); }
+  .opt-list { font-size: 13px; }
+  .opt-row {
+    display: flex; gap: 6px; padding: 4px 0; align-items: baseline;
+  }
+  .opt-row .opt-letter { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 14px; }
+  .opt-row .opt-text[contenteditable="true"] { outline: none; flex: 1; }
+  .opt-row .opt-text[contenteditable="true"]:focus { background: var(--accent-soft); }
+
+  .term-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .term-tag {
+    font-size: 11px; padding: 3px 9px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--line-strong); background: #fff; color: var(--muted);
+    font-family: var(--mono);
+  }
+  .term-tag.confirmed { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .term-tag .reason { display: none; }
+
+  .row-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .row-actions .btn { font-size: 12px; padding: 6px 14px; }
+
+  .l3-note {
+    font-size: 11.5px; color: var(--warn); margin-top: 8px; font-style: italic;
+  }
+
+  .progress-bar {
+    height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 18px;
+  }
+  .progress-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+
+  .spinner {
+    display: inline-block; width: 11px; height: 11px; border: 2px solid currentColor;
+    border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .legend {
+    font-size: 11px; color: var(--muted); margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--line); line-height: 1.7;
+  }
+  .legend .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>MCQ Localizer</h1>
+    <div class="tagline">English → Hindi · Marathi · Gujarati, kept valid as a test item</div>
+  </div>
+  <div class="status-pill" id="status-pill">checking models…</div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <h2>1 · Source file</h2>
+    <label class="upload-zone" id="upload-zone">
+      <div class="icon">⤒</div>
+      <div class="label">Drop .xlsx or click to choose</div>
+      <input type="file" id="file-input" accept=".xlsx" />
+    </label>
+    <div class="file-meta" id="file-meta">No file loaded yet.</div>
+
+    <h2 style="margin-top:24px">2 · Target language</h2>
+    <div class="lang-select" id="lang-select">
+      <label class="lang-option active" data-lang="Hindi">
+        <input type="radio" name="lang" value="Hindi" checked> हिन्दी &nbsp;Hindi
+      </label>
+      <label class="lang-option" data-lang="Marathi">
+        <input type="radio" name="lang" value="Marathi"> मराठी &nbsp;Marathi
+      </label>
+      <label class="lang-option" data-lang="Gujarati">
+        <input type="radio" name="lang" value="Gujarati"> ગુજરાતી &nbsp;Gujarati
+      </label>
+    </div>
+
+    <h2 style="margin-top:24px">3 · Run pipeline</h2>
+    <button class="btn full accent" id="process-all-btn" disabled>Process all rows</button>
+    <button class="btn full secondary" id="export-btn" disabled>Export approved → .xlsx</button>
+
+    <div class="legend">
+      <div><span class="dot" style="background:#ece9e2"></span>Pending — not yet processed</div>
+      <div><span class="dot" style="background:var(--warn)"></span>Processing — running 3 layers</div>
+      <div><span class="dot" style="background:var(--good)"></span>Done — needs your review</div>
+      <div><span class="dot" style="background:var(--good)"></span><strong>Approved</strong> — locked in for export</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div id="empty-state" class="empty-state">
+      <div class="glyph">“</div>
+      <div>Upload an English MCQ workbook to begin.<br>Each row will pass through translation, term protection, and structure-repair before you approve it.</div>
+    </div>
+
+    <div id="working-area" style="display:none">
+      <div class="toolbar">
+        <span class="count" id="row-count">0 rows</span>
+        <span class="count" id="approved-count">0 approved</span>
+        <div class="spacer"></div>
+      </div>
+      <div class="progress-bar" id="progress-bar" style="display:none">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div id="rows-container"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentLanguage = 'Hindi';
+let rows = [];
+let currentFilename = '';
+
+// ---- Status polling ----
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    const pill = document.getElementById('status-pill');
+    if (data.status === 'ready') {
+      pill.textContent = `models ready · ${data.device || 'device unknown'}`;
+      pill.className = 'status-pill ready';
+      return;
+    } else if (data.status === 'error') {
+      pill.textContent = 'model load failed — see terminal';
+      pill.className = 'status-pill error';
+      return;
+    } else {
+      pill.textContent = data.status === 'loading' ? 'loading both models…' : 'starting…';
+    }
+  } catch (e) {
+    document.getElementById('status-pill').textContent = 'server unreachable';
+    document.getElementById('status-pill').className = 'status-pill error';
+  }
+  setTimeout(pollStatus, 3000);
+}
+pollStatus();
+
+// ---- Language selection ----
+document.querySelectorAll('.lang-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.lang-option').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    currentLanguage = opt.dataset.lang;
+  });
+});
+
+// ---- Upload ----
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', handleFile);
+
+async function handleFile() {
+  const file = fileInput.files[0];
+  if (!file) return;
+  currentFilename = file.name;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  document.getElementById('file-meta').innerHTML = 'Uploading…';
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById('file-meta').innerHTML = `<span style="color:var(--accent)">${data.error}</span>`;
+    return;
+  }
+
+  rows = data.rows.map((r, i) => ({
+    ...r,
+    id: i,
+    confirmed_terms: r.candidate_terms.map(c => c.term), // pre-confirm all detected terms by default
+    status: 'pending',
+    final_question: null,
+    final_options: null,
+    approved: false,
+  }));
+
+  document.getElementById('file-meta').innerHTML =
+    `<strong>${data.filename}</strong><br>${data.row_count} rows loaded`;
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('working-area').style.display = 'block';
+  document.getElementById('process-all-btn').disabled = false;
+  renderRows();
+}
+
+// ---- Rendering ----
+function renderRows() {
+  document.getElementById('row-count').textContent = `${rows.length} rows`;
+  document.getElementById('approved-count').textContent =
+    `${rows.filter(r => r.approved).length} approved`;
+  document.getElementById('export-btn').disabled = rows.filter(r => r.approved).length === 0;
+
+  const container = document.getElementById('rows-container');
+  container.innerHTML = '';
+  rows.forEach(row => container.appendChild(renderRowCard(row)));
+}
+
+function renderRowCard(row) {
+  const card = document.createElement('div');
+  card.className = 'row-card' + (row.approved ? ' approved' : '');
+  card.dataset.id = row.id;
+
+  const statusTag = row.approved ? '<span class="status-tag approved-tag">Approved</span>'
+    : row.status === 'processing' ? '<span class="status-tag processing"><span class="spinner"></span> Processing</span>'
+    : row.status === 'done' ? '<span class="status-tag done">Needs review</span>'
+    : row.status === 'error' ? '<span class="status-tag error-tag">Error</span>'
+    : '<span class="status-tag pending">Pending</span>';
+
+  const termTags = (row.candidate_terms || []).map(c => {
+    const confirmed = row.confirmed_terms.includes(c.term);
+    return `<span class="term-tag ${confirmed ? 'confirmed' : ''}" data-term="${esc(c.term)}" title="${esc(c.reason)}">${esc(c.term)}</span>`;
+  }).join('');
+
+  const englishOptsHtml = row.options.filter(o => o).map((o, i) =>
+    `<div class="opt-row"><span class="opt-letter">${'ABCDE'[i]}</span><span>${esc(o)}</span></div>`
+  ).join('');
+
+  let finalStageHtml = '';
+  if (row.status === 'done' || row.approved) {
+    const finalOptsHtml = (row.final_options || []).filter(o => o).map((o, i) =>
+      `<div class="opt-row"><span class="opt-letter">${'ABCDE'[i]}</span><span class="opt-text" contenteditable="${!row.approved}">${esc(o)}</span></div>`
+    ).join('');
+    finalStageHtml = `
+      <div class="stage final">
+        <div class="stage-label">Final (${currentLanguage}) — editable</div>
+        <div class="q-text" contenteditable="${!row.approved}">${esc(row.final_question)}</div>
+        <div class="opt-list">${finalOptsHtml}</div>
+        ${row.l3_parse_error ? `<div class="l3-note">⚠ ${esc(row.l3_parse_error)}</div>` : ''}
+      </div>`;
+  } else {
+    finalStageHtml = `
+      <div class="stage final">
+        <div class="stage-label">Final (${currentLanguage})</div>
+        <div style="color:var(--muted);font-size:13px">Run the pipeline to see the localized result here.</div>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="row-card-header">
+      <span class="sr">#${row.sr_no ?? row.id + 1}</span>
+      ${statusTag}
+    </div>
+    <div class="row-card-body">
+      <div class="stage-grid">
+        <div class="stage">
+          <div class="stage-label">English source</div>
+          <div class="q-text">${esc(row.question)}</div>
+          <div class="opt-list">${englishOptsHtml}</div>
+          <div class="term-tags">${termTags}</div>
+        </div>
+        ${finalStageHtml}
+      </div>
+      <div class="row-actions">
+        <button class="btn secondary process-btn" data-id="${row.id}">
+          ${row.status === 'done' || row.approved ? 'Re-run' : 'Run pipeline'}
+        </button>
+        ${row.status === 'done' && !row.approved ? `<button class="btn approve-btn" data-id="${row.id}">Approve</button>` : ''}
+        ${row.approved ? `<button class="btn secondary unapprove-btn" data-id="${row.id}">Unapprove</button>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Term tag toggles
+  card.querySelectorAll('.term-tag').forEach(tag => {
+    tag.addEventListener('click', () => {
+      const term = tag.dataset.term;
+      const idx = row.confirmed_terms.indexOf(term);
+      if (idx >= 0) row.confirmed_terms.splice(idx, 1);
+      else row.confirmed_terms.push(term);
+      tag.classList.toggle('confirmed');
+    });
+  });
+
+  // Editable final fields sync back to row state on blur
+  const finalQEl = card.querySelector('.stage.final .q-text');
+  if (finalQEl && finalQEl.isContentEditable) {
+    finalQEl.addEventListener('blur', () => { row.final_question = finalQEl.textContent; });
+  }
+  card.querySelectorAll('.stage.final .opt-text').forEach((el, i) => {
+    if (el.isContentEditable) {
+      el.addEventListener('blur', () => { row.final_options[i] = el.textContent; });
+    }
+  });
+
+  card.querySelector('.process-btn').addEventListener('click', () => processRow(row.id));
+  const approveBtn = card.querySelector('.approve-btn');
+  if (approveBtn) approveBtn.addEventListener('click', () => { row.approved = true; renderRows(); });
+  const unapproveBtn = card.querySelector('.unapprove-btn');
+  if (unapproveBtn) unapproveBtn.addEventListener('click', () => { row.approved = false; renderRows(); });
+
+  return card;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ---- Pipeline execution ----
+async function processRow(id) {
+  const row = rows.find(r => r.id === id);
+  row.status = 'processing';
+  renderRows();
+
+  try {
+    const res = await fetch('/api/process_row', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: row.question,
+        options: row.options.filter(o => o),
+        language: currentLanguage,
+        confirmed_terms: row.confirmed_terms,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      row.status = 'error';
+      row.l3_parse_error = data.error;
+    } else {
+      row.final_question = data.final_question;
+      row.final_options = data.final_options;
+      row.l3_parse_error = data.l3_parse_error;
+      row.status = 'done';
+    }
+  } catch (e) {
+    row.status = 'error';
+    row.l3_parse_error = e.message;
+  }
+  renderRows();
+}
+
+document.getElementById('process-all-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('process-all-btn');
+  btn.disabled = true;
+  const progressBar = document.getElementById('progress-bar');
+  const progressFill = document.getElementById('progress-fill');
+  progressBar.style.display = 'block';
+
+  const pending = rows.filter(r => !r.approved);
+  for (let i = 0; i < pending.length; i++) {
+    await processRow(pending[i].id);
+    progressFill.style.width = `${((i + 1) / pending.length) * 100}%`;
+  }
+  progressBar.style.display = 'none';
+  btn.disabled = false;
+});
+
+// ---- Export ----
+document.getElementById('export-btn').addEventListener('click', async () => {
+  const approvedRows = rows.filter(r => r.approved);
+  const res = await fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rows: approvedRows,
+      language: currentLanguage,
+      filename: currentFilename.replace('.xlsx', `_${currentLanguage}.xlsx`),
+    }),
+  });
+  const data = await res.json();
+  if (data.filename) {
+    window.location.href = `/api/download/${data.filename}`;
+  }
+});
+</script>
+</body>
+</html>
